@@ -1,0 +1,6 @@
+Estrategia,Meses,Hedge_ratio_promedio,Hedge_ratio_minimo,Hedge_ratio_maximo,Exposicion_residual_abs_promedio,Costo_transaccional_promedio,Costo_transaccional_total,% meses HR 30%,% meses HR 60%,% meses HR 90%,% meses HR 100%,Tipo,Comentario
+GARCH,98,0.45,0.3,0.9,239481.76,38.6,3783.08,63.27,24.49,12.24,0.0,Benchmark volatilidad,Benchmark econométrico clásico de volatilidad.
+EWMA,98,0.46,0.3,0.9,235494.45,39.4,3861.23,60.2,27.55,12.24,0.0,Benchmark volatilidad,Benchmark RiskMetrics/industria.
+STATIC,98,0.6,0.6,0.6,172998.42,51.9,5086.15,0.0,100.0,0.0,0.0,Benchmark estático,Cobertura fija de referencia corporativa.
+LSTM,98,0.54,0.3,0.9,196785.62,47.14,4619.92,44.9,28.57,26.53,0.0,Deep Learning,Modelo recurrente Deep Learning basado en arquitectura LSTM.
+GRU,98,0.53,0.3,0.9,201926.55,46.11,4519.16,39.8,42.86,17.35,0.0,Deep Learning,Modelo recurrente Deep Learning basado en arquitectura GRU.

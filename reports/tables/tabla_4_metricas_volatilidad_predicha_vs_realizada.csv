@@ -1,0 +1,5 @@
+Modelo,MAE_volatilidad,RMSE_volatilidad,Volatilidad_predicha_promedio,Volatilidad_realizada_promedio,Meses
+EWMA,0.004783,0.006391,0.020491,0.01955,98
+GARCH,0.004686,0.006079,0.021714,0.019553,98
+GRU,0.009242,0.01244,0.020002,0.01955,98
+LSTM,0.006833,0.008664,0.024347,0.01955,98

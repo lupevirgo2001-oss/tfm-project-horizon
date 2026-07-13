@@ -1,0 +1,6 @@
+Ranking,Estrategia,Tipo,PnL proxy neto acumulado,PnL proxy neto medio mensual,Volatilidad PnL proxy mensual,Desv. exposición residual,Máx. drawdown,Comentario
+1,LSTM,Deep Learning,18317.95,186.92,4702.35,108032.39,-40802.97,Modelo recurrente Deep Learning basado en arquitectura LSTM.
+2,STATIC,Benchmark estático,6788.39,69.27,3559.41,7711.21,-37766.82,Cobertura fija de referencia corporativa.
+3,GRU,Deep Learning,5370.91,54.81,4489.4,94417.94,-58235.73,Modelo recurrente Deep Learning basado en arquitectura GRU.
+4,GARCH,Benchmark volatilidad,-2223.27,-22.69,4897.55,93370.59,-43032.42,Benchmark econométrico clásico de volatilidad.
+5,EWMA,Benchmark volatilidad,-2660.76,-27.15,4730.2,93296.2,-33778.27,Benchmark RiskMetrics/industria.

@@ -1,0 +1,6 @@
+strategy,mean_net_pnl,std_net_pnl,cum_net_pnl,residual_exposure_std,max_drawdown,rank_cum_net_pnl,tipo_estrategia,comentario_resultado
+LSTM,186.91785211597778,4702.354692324235,18317.94950736582,108032.39460605748,-40802.97248112983,1,Deep Learning,Modelo recurrente Deep Learning basado en arquitectura LSTM.
+STATIC,69.26927581961502,3559.4135558653397,6788.3890303222715,7711.207024104488,-37766.82167139393,2,Benchmark estático,Cobertura fija de referencia corporativa.
+GRU,54.80517130038133,4489.4002753073955,5370.90678743737,94417.94437442897,-58235.72553808756,3,Deep Learning,Modelo recurrente Deep Learning basado en arquitectura GRU.
+GARCH,-22.686453646148752,4897.545229620032,-2223.272457322578,93370.58610187934,-43032.42214385679,4,Benchmark volatilidad,Benchmark econométrico clásico de volatilidad.
+EWMA,-27.150590105756393,4730.1968543999465,-2660.7578303641267,93296.20459042411,-33778.26555738473,5,Benchmark volatilidad,Benchmark RiskMetrics/industria.

@@ -1,0 +1,200 @@
+import numpy as np
+import pandas as pd
+
+from .config import LOW_HEDGE, MID_HEDGE, HIGH_HEDGE, PIP_COST
+
+
+def hedge_ratio_from_var(var_value, q33, q66):
+    """
+    Asigna el hedge ratio según el nivel relativo del VaR proyectado.
+    Los umbrales q33 y q66 se calculan con información histórica
+    disponible antes del mes de decisión
+    """
+    if pd.isna(var_value) or pd.isna(q33) or pd.isna(q66):
+        return MID_HEDGE
+
+    if var_value <= q33:
+        return LOW_HEDGE
+    elif var_value <= q66:
+        return MID_HEDGE
+    return HIGH_HEDGE
+
+
+def transaction_cost(volume, pip_cost=PIP_COST):
+    return abs(volume) * pip_cost
+
+
+def _expanding_quantile_shifted(series: pd.Series, q: float, min_history: int = 12) -> pd.Series:
+    """
+    Calcula percentiles históricos de forma expandida y desplazada.
+    El valor del mes t se calcula usando únicamente información anterior a t.
+
+    min_history=12 implica que durante los primeros 12 meses no se fuerza
+    una regla dinámica con poca historia; en esos meses se usa MID_HEDGE.
+    """
+    values = []
+
+    for i in range(len(series)):
+        historical = series.iloc[:i].dropna()
+
+        if len(historical) < min_history:
+            values.append(np.nan)
+        else:
+            values.append(float(historical.quantile(q)))
+
+    return pd.Series(values, index=series.index, dtype="float64")
+
+
+def build_monthly_strategy_signal(forecast_df, min_history: int = 12):
+    """
+    Convierte predicciones diarias del modelo en una señal mensual de cobertura
+    Metodología:
+    - Se toma la última predicción disponible de cada mes.
+    - Para cada modelo, se calculan percentiles históricos 33 y 66 del VaR
+      usando solo meses anteriores.
+    - Se asigna hedge ratio:
+       - VaR bajo: 30%
+       - VaR medio: 60%
+       - VaR alto: 90%
+    """
+    df = forecast_df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+
+    # Mes en el que se genera la predicción.
+    df["forecast_month"] = df["date"].dt.to_period("M").astype(str)
+
+    # Se conserva la última predicción disponible de cada mes.
+    monthly = (
+        df.sort_values("date")
+        .groupby(["forecast_month", "model"], as_index=False)
+        .last()
+        .sort_values(["model", "forecast_month"])
+        .reset_index(drop=True)
+    )
+
+    # La señal generada en el mes t se aplica a la cobertura del mes t+1.
+    monthly["month"] = (
+        pd.PeriodIndex(monthly["forecast_month"], freq="M") + 1
+    ).astype(str)
+
+    monthly["q33_hist"] = np.nan
+    monthly["q66_hist"] = np.nan
+
+    for model_name, idx in monthly.groupby("model").groups.items():
+        model_var = monthly.loc[idx, "y_pred_var_95_1m"].astype(float)
+
+        monthly.loc[idx, "q33_hist"] = _expanding_quantile_shifted(
+            model_var, 0.33, min_history=min_history
+        )
+
+        monthly.loc[idx, "q66_hist"] = _expanding_quantile_shifted(
+            model_var, 0.66, min_history=min_history
+        )
+
+    monthly["q33_hist"] = monthly["q33_hist"].astype(float)
+    monthly["q66_hist"] = monthly["q66_hist"].astype(float)
+
+    monthly["hedge_ratio"] = monthly.apply(
+        lambda row: hedge_ratio_from_var(
+            row["y_pred_var_95_1m"],
+            row["q33_hist"],
+            row["q66_hist"],
+        ),
+        axis=1,
+    )
+
+    monthly["risk_bucket"] = monthly["hedge_ratio"].map(
+        {
+            LOW_HEDGE: "low_var",
+            MID_HEDGE: "medium_var_or_insufficient_history",
+            HIGH_HEDGE: "high_var",
+        }
+    )
+
+    return monthly
+
+
+def backtest_monthly(
+    monthly_exposure,
+    strategy_signal,
+    monthly_fx_returns,
+    static_hr=0.60,
+    common_months_only=True,
+):
+    """
+    Ejecuta el backtest mensual de las estrategias de cobertura.
+
+    Si common_months_only=True, todas las estrategias se evalúan únicamente
+    en los meses comunes donde existen señales para todos los modelos dinámicos
+    disponibles. Esto evita comparar estrategias sobre ventanas temporales distintas
+    """
+    rows = []
+
+    base = monthly_exposure.merge(monthly_fx_returns, on="month", how="inner")
+    sig = strategy_signal.copy()
+
+    base["month"] = base["month"].astype(str)
+    sig["month"] = sig["month"].astype(str)
+
+    if common_months_only and not sig.empty:
+        month_sets = []
+
+        for _, group in sig.groupby("model"):
+            month_sets.append(set(group["month"].dropna().astype(str)))
+
+        if month_sets:
+            common_months = set.intersection(*month_sets)
+
+            base = base[base["month"].isin(common_months)].copy()
+            sig = sig[sig["month"].isin(common_months)].copy()
+
+    base = base.sort_values("month").reset_index(drop=True)
+    sig = sig.sort_values(["month", "model"]).reset_index(drop=True)
+
+    # Benchmark estático: cobertura fija del 60%
+    for _, row in base.iterrows():
+        exposure = float(row["base_exposure"])
+        fx_ret = float(row["fx_return_month"])
+        month = row["month"]
+
+        covered = static_hr * exposure
+        cost = transaction_cost(covered)
+
+        rows.append({
+            "month": month,
+            "strategy": "STATIC",
+            "hedge_ratio": static_hr,
+            "exposure": exposure,
+            "covered_amount": covered,
+            "transaction_cost": cost,
+            "net_pnl": covered * fx_ret - cost,
+            "residual_exposure": exposure - covered,
+            "fx_return_month": fx_ret,
+        })
+
+    # Estrategias dinámicas: LSTM, GRU, GARCH, EWMA
+    sig = sig.merge(
+        base[["month", "base_exposure", "fx_return_month"]],
+        on="month",
+        how="inner",
+    )
+
+    for _, r in sig.iterrows():
+        exposure = float(r["base_exposure"])
+        hedge_ratio = float(r["hedge_ratio"])
+        covered = hedge_ratio * exposure
+        cost = transaction_cost(covered)
+
+        rows.append({
+            "month": r["month"],
+            "strategy": r["model"],
+            "hedge_ratio": hedge_ratio,
+            "exposure": exposure,
+            "covered_amount": covered,
+            "transaction_cost": cost,
+            "net_pnl": covered * float(r["fx_return_month"]) - cost,
+            "residual_exposure": exposure - covered,
+            "fx_return_month": float(r["fx_return_month"]),
+        })
+
+    return pd.DataFrame(rows).sort_values(["month", "strategy"]).reset_index(drop=True)
